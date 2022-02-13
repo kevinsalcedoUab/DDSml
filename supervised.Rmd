@@ -14,6 +14,10 @@ library("lattice", warn.conflicts = FALSE)
 library("caret", warn.conflicts = FALSE)
 library("gbm", warn.conflicts = FALSE)
 library("pROC", warn.conflicts = FALSE)
+library(tidyjson)
+library(tidyverse)
+library(ggplot2)
+library(ggraph)
 
 set.seed(42)
 ```
@@ -34,21 +38,67 @@ Se proporcionan los siguentes archivos:
 if (!dir.exists("data")) dir.create("data")
 if (!dir.exists("data/raw")) dir.create("data/raw")
 
-events <- read.csv("data/raw/events_sample.csv")
+events_total <- read.csv("data/raw/events.csv")
 features <- read.csv("data/raw/features.csv")
 ```
 
 ### Events analysis
 
 ```{r events_stats, echo=FALSE}
+events <- events_total[sample(1:nrow(events_total), size = 10000), ]
 
+#ataques mas comunes
+events_attacCat <- events %>%
+     group_by(attack_cat) %>% 
+     tally()
+
+events_attacCat <- as.data.frame(events_attacCat)
+events_attacCat <- events_attacCat[-c(1), ]
+
+pie(events_attacCat$n, labels = events_attacCat$attack_cat, main = 'Ataques más comunes')
+
+#protocoles mas comunes
+events_prot <- events %>%
+     group_by(proto) %>% 
+     tally()
+
+events_prot <- as.data.frame(events_prot)
+
+pie(events_prot$n, labels = events_prot$proto, main = 'Protocoles más comunes')
+
+#Intente otros graficos pero no me funcionaban, perdona por tantos quesitos :)
+
+#barplot(events_prot$proto, names = events_prot$n)
+#box()
 
 ```
 
 ### Data enrichment
 
 ```{r data_enrich, echo=FALSE}
+#IPS que mas atacadas
+events_src_ip <- events %>%
+     group_by(srcip) %>% 
+     filter(Label == 1) %>%
+     tally()
 
+pie(events_src_ip$n, labels = events_src_ip$srcip, main = 'IPs de atacantes')
+
+#Puertos mas atacados (podria ser otro grafico)
+events_dst_port <- events %>%
+     group_by(dsport) %>% 
+     filter(Label == 1) %>%
+     tally()
+
+pie(events_dst_port$n, labels = events_dst_port$dsport, main = 'puertos más atacados')
+
+#IPs que mas atacan
+events_dst_ip <- events %>%
+     group_by(dstip) %>% 
+     filter(Label == 1) %>%
+     tally()
+
+pie(events_dst_ip$n, labels = events_dst_ip$dstip, main = 'IPs más atacadas')
 
 ```
 
@@ -64,7 +114,10 @@ events$Label <- ifelse(events$Label == 1, "ATTACK", "NORMAL")
 events$Label <- as.factor(events$Label)
 
 outcomeName <- 'Label'
-predictorsNames <- names(events)[names(events) != outcomeName]
+
+#Si no se quita esta columna se verá solo que esta columna tiene toda la importancia, ya que esta columna por si misma determina si es un ataque o no.
+outcomeName2 <- 'attackcat'
+predictorsNames <- names(events)[names(events) != outcomeName & names(events) != outcomeName2]
 
 prop.table(table(events$Label))
 ```
@@ -132,6 +185,9 @@ plot(varImp(objModel,scale=F))
 
 
 ## Conclusion
+Como se ve en el gráfico el factor más importante es la procedencia de la ip, esto quiere decir que casi siempre es el mismo atacante. Después se refleja que la gran mayoría de ataques son dirigidos a IPs en concreto. No obstante, me gustaría resaltar que estos analisis fueron hecho sobre una muestra sampleada para mejorar la velocidad de ejecución; sin embargo, al ser sampleada aleatoriamente los resultados serian practicamente los mismos que si los datos fueran los completos. 
+
+Para acabar, estos datos podrian ser utilizados para proteger las ips mas vulnerables o atacadas, o también para prohibir la conexión a ciertas IPs. 
 
 ```{r conclusion, echo=FALSE}
 
